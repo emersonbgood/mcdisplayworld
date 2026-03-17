@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>MC Display World (Java)</title>
+    <style>
+      body { font-family: system-ui, sans-serif; background:#0f172a; color:#e2e8f0; margin:0; padding:24px; max-width:900px; }
+      .card { background:#1e293b; border-radius:12px; padding:16px; margin-bottom:16px; }
+      button { background:#22c55e; border:0; border-radius:8px; font-weight:700; padding:8px 12px; }
+      a { color:#93c5fd; }
+    </style>
+  </head>
+  <body>
+    <h1>MC Display World (Java MVP)</h1>
+    <div class="card">
+      <button id="createRoomBtn">Create room</button>
+      <p id="roomInfo"></p>
+    </div>
+    <div class="card">
+      <input type="file" id="assetInput" />
+      <button id="uploadBtn">Upload asset</button>
+      <p id="uploadStatus"></p>
+    </div>
+    <div class="card">
+      <button id="refreshBtn">Refresh assets</button>
+      <ul id="assetList"></ul>
+    </div>
+
+    <script>
+      const params = new URLSearchParams(window.location.search);
+      let roomId = params.get('room');
+
+      const roomInfo = document.getElementById('roomInfo');
+      const uploadStatus = document.getElementById('uploadStatus');
+      const assetList = document.getElementById('assetList');
+
+      function renderRoom() {
+        if (!roomId) {
+          roomInfo.textContent = 'No room yet.';
+          return;
+        }
+        const share = `${window.location.origin}/?room=${roomId}`;
+        roomInfo.innerHTML = `Room <code>${roomId}</code><br/><a href="${share}">${share}</a>`;
+      }
+
+      async function createRoom() {
+        const resp = await fetch('/api/rooms', { method: 'POST' });
+        const room = await resp.json();
+        roomId = room.id;
+        history.replaceState({}, '', `/?room=${roomId}`);
+        renderRoom();
+        await refreshAssets();
+      }
+
+      async function uploadAsset() {
+        if (!roomId) {
+          uploadStatus.textContent = 'Create room first.';
+          return;
+        }
+        const file = document.getElementById('assetInput').files[0];
+        if (!file) {
+          uploadStatus.textContent = 'Choose a file first.';
+          return;
+        }
+        const resp = await fetch(`/api/rooms/${roomId}/assets/${encodeURIComponent(file.name)}`, {
+          method: 'PUT',
+          body: await file.arrayBuffer()
+        });
+        if (!resp.ok) {
+          const error = await resp.json();
+          uploadStatus.textContent = `Upload failed: ${error.error}`;
+          return;
+        }
+        uploadStatus.textContent = `Uploaded ${file.name}`;
+        await refreshAssets();
+      }
+
+      async function refreshAssets() {
+        if (!roomId) {
+          assetList.innerHTML = '';
+          return;
+        }
+        const resp = await fetch(`/api/rooms/${roomId}`);
+        if (!resp.ok) {
+          assetList.innerHTML = '<li>Room not found</li>';
+          return;
+        }
+        const room = await resp.json();
+        assetList.innerHTML = '';
+        room.assets.forEach((asset) => {
+          const li = document.createElement('li');
+          li.innerHTML = `<a target="_blank" href="/${asset.path}">${asset.name}</a> (${asset.size} bytes)`;
+          assetList.appendChild(li);
+        });
+      }
+
+      document.getElementById('createRoomBtn').addEventListener('click', createRoom);
+      document.getElementById('uploadBtn').addEventListener('click', uploadAsset);
+      document.getElementById('refreshBtn').addEventListener('click', refreshAssets);
+
+      renderRoom();
+      refreshAssets();
+    </script>
+  </body>
+</html>
